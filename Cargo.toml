@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "dfu-core",
+    "dfu-cli",
+]
+resolver = "2"
