@@ -129,3 +129,48 @@ impl Drop for DfuHandle {
         let _ = self.handle.release_interface(self.interface);
     }
 }
+impl DfuHandle {
+    pub fn set_address(&self, address: u32) -> Result<(), DfuError> {
+        let cmd = [
+            crate::protocol::STM32_CMD_SET_ADDRESS,
+            (address & 0xFF) as u8,
+            ((address >> 8) & 0xFF) as u8,
+            ((address >> 16) & 0xFF) as u8,
+            ((address >> 24) & 0xFF) as u8,
+        ];
+
+        self.download_block(0, &cmd)?;
+        self.wait_for_idle_after_command()
+    }
+
+    pub fn mass_erase(&self) -> Result<(), DfuError> {
+        let cmd = [crate::protocol::STM32_CMD_ERASE_ALL];
+
+        self.download_block(0, &cmd)?;
+        self.wait_for_idle_after_command()
+    }
+
+    fn wait_for_idle_after_command(&self) -> Result<(), DfuError> {
+        loop {
+            let status = self.get_status()?;
+            match status.state {
+                crate::state_machine::DfuState::DfuDownloadBusy => {
+                    std::thread::sleep(std::time::Duration::from_millis(
+                        status.poll_timeout_ms as u64
+                    ));
+                }
+                crate::state_machine::DfuState::DfuDownloadIdle => return Ok(()),
+                crate::state_machine::DfuState::DfuError => {
+                    return Err(DfuError::Protocol(format!(
+                        "device error after command: {:?}", status.status
+                    )));
+                }
+                state => {
+                    return Err(DfuError::Protocol(format!(
+                        "unexpected state after command: {:?}", state
+                    )));
+                }
+            }
+        }
+    }
+}

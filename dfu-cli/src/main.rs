@@ -1,4 +1,3 @@
-
 use clap::{Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
 use dfu_core::{usb, firmware::Firmware, device::DfuHandle, transfer};
@@ -19,7 +18,7 @@ enum Commands {
 
     /// Download firmware to a DFU device
     Download {
-        /// Firmware file to flash
+        /// Firmware file to flash (.bin only)
         #[arg(short, long)]
         file: String,
 
@@ -30,6 +29,14 @@ enum Commands {
         /// USB product ID in hex (e.g. df11)
         #[arg(short, long)]
         pid: String,
+
+        /// Start address in hex (default: 0x08000000)
+        #[arg(short, long, default_value = "0x08000000")]
+        address: String,
+
+        /// Skip mass erase before programming
+        #[arg(long, default_value_t = false)]
+        no_erase: bool,
     },
 }
 
@@ -40,7 +47,9 @@ fn main() {
 
     let result = match cli.command {
         Commands::List => cmd_list(),
-        Commands::Download { file, vid, pid } => cmd_download(file, vid, pid),
+        Commands::Download { file, vid, pid, address, no_erase } => {
+            cmd_download(file, vid, pid, address, no_erase)
+        }
     };
 
     if let Err(e) = result {
@@ -74,24 +83,36 @@ fn cmd_list() -> Result<(), dfu_core::error::DfuError> {
     Ok(())
 }
 
+fn parse_hex_u32(s: &str) -> Result<u32, dfu_core::error::DfuError> {
+    u32::from_str_radix(s.trim_start_matches("0x"), 16)
+        .map_err(|_| dfu_core::error::DfuError::InvalidFirmware(
+            format!("invalid hex value: {}", s)
+        ))
+}
+
+fn parse_hex_u16(s: &str) -> Result<u16, dfu_core::error::DfuError> {
+    u16::from_str_radix(s.trim_start_matches("0x"), 16)
+        .map_err(|_| dfu_core::error::DfuError::InvalidFirmware(
+            format!("invalid hex value: {}", s)
+        ))
+}
+
 fn cmd_download(
     file: String,
     vid: String,
     pid: String,
+    address: String,
+    no_erase: bool,
 ) -> Result<(), dfu_core::error::DfuError> {
-    let vid = u16::from_str_radix(vid.trim_start_matches("0x"), 16)
-        .map_err(|_| dfu_core::error::DfuError::InvalidFirmware(
-            format!("invalid VID: {}", vid)
-        ))?;
-
-    let pid = u16::from_str_radix(pid.trim_start_matches("0x"), 16)
-        .map_err(|_| dfu_core::error::DfuError::InvalidFirmware(
-            format!("invalid PID: {}", pid)
-        ))?;
+    let vid = parse_hex_u16(&vid)?;
+    let pid = parse_hex_u16(&pid)?;
+    let start_address = parse_hex_u32(&address)?;
 
     let firmware = Firmware::load(&file)?;
 
     println!("loaded {} ({} bytes)", file, firmware.size());
+    println!("target address: {:#010x}", start_address);
+    println!("erase: {}", if no_erase { "skipped" } else { "mass erase" });
 
     let handle = DfuHandle::open(vid, pid)?;
 
@@ -103,7 +124,7 @@ fn cmd_download(
             .progress_chars("=> "),
     );
 
-    transfer::download(&handle, &firmware, |progress| {
+    transfer::download(&handle, &firmware, start_address, no_erase, |progress| {
         bar.set_position(progress.bytes_sent as u64);
     })?;
 

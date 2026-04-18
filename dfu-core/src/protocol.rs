@@ -12,6 +12,11 @@ pub const DFU_ABORT: u8     = 6;
 pub const USB_CLASS_APP_SPECIFIC: u8 = 0xFE;
 pub const USB_SUBCLASS_DFU: u8       = 0x01;
 
+pub const STM32_START_ADDRESS: u32 = 0x0800_0000;
+
+pub const STM32_CMD_SET_ADDRESS: u8  = 0x21;
+pub const STM32_CMD_ERASE_ALL: u8    = 0x41;
+
 #[derive(Debug, Clone)]
 pub struct DfuStatusResponse {
     pub status: DfuStatus,
