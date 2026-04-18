@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dfu-core = {path = "../dfu-core"}
+clap = {version = "4", features = ["derive"]}
+indicatif = "0.17"
+env_logger = "0.11"
+log = "0.4"
